@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tirage au Sort Tactile</title>
+    <style>
+        /* Réinitialisation complète et blocage des gestes système */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #090b10;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+
+        #canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 1;
+            touch-action: none;
+        }
+
+        /* Interface superposée */
+        .ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px;
+        }
+
+        .top-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel {
+            background: rgba(18, 22, 34, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 16px;
+            padding: 10px 14px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .brand-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #00f5d4;
+            box-shadow: 0 0 10px #00f5d4;
+            transition: background-color 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .brand-title {
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            color: #f8fafc;
+        }
+
+        .finger-count {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 2px;
+            font-weight: 600;
+        }
+
+        .actions-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn {
+            pointer-events: auto;
+            appearance: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(25, 30, 46, 0.9);
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 14px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: transform 0.12s ease, background 0.2s ease, opacity 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+        }
+
+        .btn:active {
+            transform: scale(0.94);
+        }
+
+        .btn-danger {
+            color: #fda4af;
+            border-color: rgba(244, 63, 94, 0.35);
+            background: rgba(136, 19, 55, 0.45);
+        }
+
+        .btn-primary {
+            font-size: 16px;
+            padding: 14px 28px;
+            border-radius: 999px;
+            background: rgba(12, 15, 24, 0.88);
+            border: 2px solid rgba(255, 255, 255, 0.65);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Barre de progression du compte à rebours */
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            background: rgba(18, 22, 34, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 999px;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .progress-track.visible {
+            opacity: 1;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00f5d4, #f72585, #fee440);
+            border-radius: 999px;
+        }
+
+        /* Message central */
+        .center-box {
+            margin: auto;
+            text-align: center;
+            max-width: 360px;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .center-box.hidden {
+            opacity: 0;
+            transform: scale(0.92);
+        }
+
+        .center-title {
+            font-size: 21px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            color: #ffffff;
+        }
+
+        .center-sub {
+            font-size: 13px;
+            line-height: 1.45;
+            color: #cbd5e1;
+        }
+
+        /* Zone inférieure */
+        .bottom-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 60px;
+            padding-bottom: 8px;
+        }
+
+        .hidden-el {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas"></canvas>
+
+    <div class="ui-overlay">
+        <div class="top-container">
+            <div class="top-bar">
+                <div class="panel brand-box">
+                    <div id="statusDot" class="status-dot"></div>
+                    <div>
+                        <div class="brand-title">Tirage Tactile</div>
+                        <div id="fingerCounter" class="finger-count">0 / 10 doigts posés</div>
+                    </div>
+                </div>
+
+                <div class="actions-group">
+                    <button id="clearSimBtn" class="btn btn-danger hidden-el" type="button">Effacer</button>
+                    <button id="soundBtn" class="btn" type="button" aria-label="Activer ou couper le son">Son : ON</button>
+                </div>
+            </div>
+
+            <div id="progressTrack" class="progress-track">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+        </div>
+
+        <div id="centerCard" class="panel center-box">
+            <div id="centerTitle" class="center-title">Posez vos doigts</div>
+            <div id="centerSub" class="center-sub">
+                Maintenez au moins 2 doigts sur l'écran pendant 3 secondes.<br>
+                <span style="opacity:0.75;font-size:12px;">(Sur PC : cliquez pour ajouter des doigts virtuels)</span>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <button id="replayBtn" class="btn btn-primary hidden-el" type="button">
+                Relancer le tirage
+            </button>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            "use strict";
+
+            // --- CONFIGURATION ---
+            var MAX_FINGERS = 10;
+            var COUNTDOWN_DURATION = 3000; // 3000 ms (3 secondes)
+
+            var COLORS = [
+                { name: "Rose Néon",       hex: "#FF1E56", r: 255, g: 30,  b: 86  },
+                { name: "Cyan Électrique", hex: "#00F5D4", r: 0,   g: 245, b: 212 },
+                { name: "Jaune Solaire",   hex: "#FEE440", r: 254, g: 228, b: 64  },
+                { name: "Violet Laser",    hex: "#C77DFF", r: 199, g: 125, b: 255 },
+                { name: "Vert Acide",      hex: "#38B000", r: 56,  g: 176, b: 0   },
+                { name: "Orange Magma",    hex: "#FF6D00", r: 255, g: 109, b: 0   },
+                { name: "Bleu Azur",       hex: "#00BBF9", r: 0,   g: 187, b: 249 },
+                { name: "Magenta Pur",     hex: "#F72585", r: 247, g: 37,  b: 133 },
+                { name: "Menthe Glacée",   hex: "#80FFDB", r: 128, g: 255, b: 219 },
+                { name: "Or Impérial",     hex: "#FFB703", r: 255, g: 183, b: 3   }
+            ];
+
+            // --- ÉLÉMENTS DOM ---
+            var canvas = document.getElementById("canvas");
+            var ctx = canvas.getContext("2d");
+            var statusDot = document.getElementById("statusDot");
+            var fingerCounterEl = document.getElementById("fingerCounter");
+            var progressTrack = document.getElementById("progressTrack");
+            var progressFill = document.getElementById("progressFill");
+            var centerCard = document.getElementById("centerCard");
+            var centerTitle = document.getElementById("centerTitle");
+            var centerSub = document.getElementById("centerSub");
+            var clearSimBtn = document.getElementById("clearSimBtn");
+            var soundBtn = document.getElementById("soundBtn");
+            var replayBtn = document.getElementById("replayBtn");
+
+            // --- ÉTAT DU JEU ---
+            // Map d'identifiant -> { id, x, y, colorIdx, color, createdAt, phase, isSim }
+            var fingers = {};
+            var particles = [];
+
+            var state = "IDLE"; // "IDLE" | "COUNTDOWN" | "WINNER"
+            var countdownStartTime = 0;
+            var lastBeepSecond = null;
+            var winnerFinger = null;
+            var winnerStartTime = 0;
+
+            // --- AUDIO PROTÉGÉ ---
+            var soundEnabled = true;
+            var audioCtx = null;
+
+            function playTone(freq, type, duration, volume) {
+                if (!soundEnabled) return;
+                try {
+                    var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContextClass) return;
+                    if (!audioCtx) audioCtx = new AudioContextClass();
+                    if (audioCtx.state === "suspended") {
+                        audioCtx.resume();
+                    }
+                    var now = audioCtx.currentTime;
+                    var osc = audioCtx.createOscillator();
+                    var gain = audioCtx.createGain();
+                    osc.type = type || "sine";
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.001, now);
+                    gain.gain.exponentialRampToValueAtTime(volume || 0.12, now + 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + (duration || 0.12));
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + (duration || 0.12) + 0.02);
+                } catch (err) {
+                    // Ignorer toute erreur de permission audio
+                }
+            }
+
+            function playAddSound(count) {
+                var notes = [261.6, 293.7, 329.6, 349.2, 392.0, 440.0, 493.9, 523.3, 587.3, 659.3];
+                playTone(notes[(count - 1) % notes.length], "sine", 0.14, 0.14);
+            }
+
+            function playTickSound(secRemaining) {
+                var freq = secRemaining === 1 ? 660 : (secRemaining === 2 ? 520 : 420);
+                playTone(freq, "sine", 0.09, 0.12);
+            }
+
+            function playWinSound() {
+                var chord = [523.25, 659.25, 783.99, 1046.5];
+                for (var i = 0; i < chord.length; i++) {
+                    (function (f, delay) {
+                        setTimeout(function () {
+                            playTone(f, "triangle", 0.45, 0.16);
+                        }, delay);
+                    })(chord[i], i * 65);
+                }
+            }
+
+            function vibrate(pattern) {
+                try {
+                    if (navigator.vibrate) navigator.vibrate(pattern);
+                } catch (e) {}
+            }
+
+            // --- REDIMENSIONNEMENT DU CANVAS ---
+            var viewWidth = window.innerWidth;
+            var viewHeight = window.innerHeight;
+
+            function resizeCanvas() {
+                viewWidth = window.innerWidth;
+                viewHeight = window.innerHeight;
+                var dpr = window.devicePixelRatio || 1;
+                canvas.width = viewWidth * dpr;
+                canvas.height = viewHeight * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+
+            window.addEventListener("resize", resizeCanvas);
+            resizeCanvas();
+
+            // --- UTILITAIRES DOIGTS & COULEURS ---
+            function getFingerKeys() {
+                return Object.keys(fingers);
+            }
+
+            function getFingerCount() {
+                return Object.keys(fingers).length;
+            }
+
+            function hasSimulatedFingers() {
+                var keys = getFingerKeys();
+                for (var i = 0; i < keys.length; i++) {
+                    if (fingers[keys[i]].isSim) return true;
+                }
+                return false;
+            }
+
+            function pickFreeColorIndex() {
+                var used = {};
+                var keys = getFingerKeys();
+                for (var i = 0; i < keys.length; i++) {
+                    used[fingers[keys[i]].colorIdx] = true;
+                }
+                var available = [];
+                for (var c = 0; c < COLORS.length; c++) {
+                    if (!used[c]) available.push(c);
+                }
+                if (available.length === 0) {
+                    return Math.floor(Math.random() * COLORS.length);
+                }
+                return available[Math.floor(Math.random() * available.length)];
+            }
+
+            function spawnParticles(x, y, hexColor, amount) {
+                for (var i = 0; i < amount; i++) {
+                    var angle = (Math.PI * 2 * i) / amount + (Math.random() - 0.5) * 0.4;
+                    var speed = 1.5 + Math.random() * 5.5;
+                    particles.push({
+                        x: x,
+                        y: y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        r: 2 + Math.random() * 3.5,
+                        color: hexColor,
+                        alpha: 1,
+                        decay: 0.02 + Math.random() * 0.02
+                    });
+                }
+            }
+
+            // --- LOGIQUE D'AJOUT / RETRAIT / MOUVEMENT DES DOIGTS ---
+            // Cette fonction n'est appelée QUE lors d'un vrai ajout ou retrait de doigt (jamais dans touchmove)
+            function evaluateFingerCountChange() {
+                var count = getFingerCount();
+                var hasSim = hasSimulatedFingers();
+
+                fingerCounterEl.textContent = count + " / " + MAX_FINGERS + (count > 1 ? " doigts posés" : " doigt posé");
+
+                if (hasSim && state !== "WINNER") {
+                    clearSimBtn.classList.remove("hidden-el");
+                } else {
+                    clearSimBtn.classList.add("hidden-el");
+                }
+
+                if (state === "WINNER") return;
+
+                // Démarrage du compte à rebours dès 2 doigts tactiles (ou 1 doigt en mode test souris PC)
+                var minRequired = hasSim ? 1 : 2;
+
+                if (count >= minRequired) {
+                    state = "COUNTDOWN";
+                    countdownStartTime = Date.now();
+                    lastBeepSecond = 4;
+                    progressTrack.classList.add("visible");
+                    centerCard.classList.add("hidden");
+                    statusDot.style.background = "#fee440";
+                    statusDot.style.boxShadow = "0 0 12px #fee440";
+                } else {
+                    state = "IDLE";
+                    countdownStartTime = 0;
+                    lastBeepSecond = null;
+                    progressTrack.classList.remove("visible");
+                    progressFill.style.width = "0%";
+                    centerCard.classList.remove("hidden");
+                    statusDot.style.background = "#00f5d4";
+                    statusDot.style.boxShadow = "0 0 10px #00f5d4";
+
+                    if (count === 1) {
+                        centerTitle.textContent = "Encore 1 doigt !";
+                        centerSub.textContent = "Posez un 2e doigt pour lancer le compte à rebours de 3 secondes.";
+                    } else {
+                        centerTitle.textContent = "Posez vos doigts";
+                        centerSub.innerHTML = "Maintenez au moins 2 doigts sur l'écran pendant 3 secondes.<br><span style='opacity:0.75;font-size:12px;'>(Sur PC : cliquez pour ajouter des doigts virtuels)</span>";
+                    }
+                }
+            }
+
+            function addFinger(id, x, y, isSim) {
+                if (state === "WINNER") return;
+                if (fingers[id]) {
+                    fingers[id].x = x;
+                    fingers[id].y = y;
+                    return;
+                }
+                if (getFingerCount() >= MAX_FINGERS) return;
+
+                var cIdx = pickFreeColorIndex();
+                var colorObj = COLORS[cIdx];
+
+                fingers[id] = {
+                    id: id,
+                    x: x,
+                    y: y,
+                    colorIdx: cIdx,
+                    color: colorObj,
+                    createdAt: Date.now(),
+                    phase: Math.random() * Math.PI * 2,
+                    isSim: !!isSim
+                };
+
+                playAddSound(getFingerCount());
+                vibrate(18);
+                spawnParticles(x, y, colorObj.hex, 12);
+
+                // Un nouveau doigt est posé -> réinitialise le compte à rebours de 3 secondes
+                evaluateFingerCountChange();
+            }
+
+            function moveFinger(id, x, y) {
+                // Mise à jour EXCLUSIVE des coordonnées (x, y) sans toucher au chronomètre !
+                if (fingers[id]) {
+                    fingers[id].x = x;
+                    fingers[id].y = y;
+                }
+            }
+
+            function removeFinger(id) {
+                if (!fingers[id]) return;
+                delete fingers[id];
+                if (state !== "WINNER") {
+                    // Un doigt a été retiré -> réinitialise ou arrête le compte à rebours
+                    evaluateFingerCountChange();
+                }
+            }
+
+            function triggerWinnerSelection() {
+                var keys = getFingerKeys();
+                if (keys.length === 0) {
+                    evaluateFingerCountChange();
+                    return;
+                }
+
+                var randomKey = keys[Math.floor(Math.random() * keys.length)];
+                var chosen = fingers[randomKey];
+
+                // Copie figée du doigt gagnant
+                winnerFinger = {
+                    id: chosen.id,
+                    x: chosen.x,
+                    y: chosen.y,
+                    color: chosen.color,
+                    phase: chosen.phase,
+                    createdAt: chosen.createdAt
+                };
+
+                state = "WINNER";
+                winnerStartTime = Date.now();
+
+                progressTrack.classList.remove("visible");
+                clearSimBtn.classList.add("hidden-el");
+                centerCard.classList.add("hidden");
+                replayBtn.classList.remove("hidden-el");
+
+                statusDot.style.background = winnerFinger.color.hex;
+                statusDot.style.boxShadow = "0 0 14px " + winnerFinger.color.hex;
+
+                playWinSound();
+                vibrate([80, 50, 180]);
+                spawnParticles(winnerFinger.x, winnerFinger.y, "#FFFFFF", 35);
+                spawnParticles(winnerFinger.x, winnerFinger.y, winnerFinger.color.hex, 35);
+            }
+
+            function resetAll() {
+                fingers = {};
+                winnerFinger = null;
+                state = "IDLE";
+                countdownStartTime = 0;
+                lastBeepSecond = null;
+                replayBtn.classList.add("hidden-el");
+                evaluateFingerCountChange();
+            }
+
+            // --- ÉVÉNEMENTS TACTILES & SOURIS ---
+            var lastTouchTime = 0;
+
+            canvas.addEventListener("touchstart", function (e) {
+                if (e.cancelable) e.preventDefault();
+                lastTouchTime = Date.now();
+
+                // Si un gagnant est affiché depuis plus de 2 secondes, un nouveau touch relance la partie
+                if (state === "WINNER") {
+                    if (Date.now() - winnerStartTime > 2000) {
+                        resetAll();
+                    } else {
+                        return;
+                    }
+                }
+
+                for (var i = 0; i < e.changedTouches.length; i++) {
+                    var t = e.changedTouches[i];
+                    addFinger("t_" + t.identifier, t.clientX, t.clientY, false);
+                }
+            }, { passive: false });
+
+            canvas.addEventListener("touchmove", function (e) {
+                if (e.cancelable) e.preventDefault();
+                lastTouchTime = Date.now();
+
+                if (state === "WINNER") {
+                    // Permet au doigt gagnant de suivre légèrement le mouvement s'il est maintenu
+                    for (var j = 0; j < e.changedTouches.length; j++) {
+                        var tw = e.changedTouches[j];
+                        if (winnerFinger && winnerFinger.id === "t_" + tw.identifier) {
+                            winnerFinger.x = tw.clientX;
+                            winnerFinger.y = tw.clientY;
+                        }
+                    }
+                    return;
+                }
+
+                // IMPORTANT : Ne met à jour QUE les coordonnées x, y sans jamais toucher au timer !
+                for (var i = 0; i < e.changedTouches.length; i++) {
+                    var t = e.changedTouches[i];
+                    moveFinger("t_" + t.identifier, t.clientX, t.clientY);
+                }
+            }, { passive: false });
+
+            function onTouchEndOrCancel(e) {
+                if (e.cancelable) e.preventDefault();
+                lastTouchTime = Date.now();
+
+                for (var i = 0; i < e.changedTouches.length; i++) {
+                    var t = e.changedTouches[i];
+                    removeFinger("t_" + t.identifier);
+                }
+            }
+
+            canvas.addEventListener("touchend", onTouchEndOrCancel, { passive: false });
+            canvas.addEventListener("touchcancel", onTouchEndOrCancel, { passive: false });
+
+            // Mode test Souris sur PC
+            var simIdCounter = 1;
+            canvas.addEventListener("mousedown", function (e) {
+                // Ignorer les événements souris synthétiques générés par un écran tactile
+                if (Date.now() - lastTouchTime < 1000) return;
+                if (e.button !== 0) return;
+
+                if (state === "WINNER") {
+                    if (Date.now() - winnerStartTime > 2000) {
+                        resetAll();
+                    }
+                    return;
+                }
+
+                var x = e.clientX;
+                var y = e.clientY;
+
+                // Si on clique sur un doigt virtuel existant, on le retire
+                var keys = getFingerKeys();
+                for (var i = 0; i < keys.length; i++) {
+                    var f = fingers[keys[i]];
+                    if (f.isSim) {
+                        var dx = f.x - x;
+                        var dy = f.y - y;
+                        if (Math.sqrt(dx * dx + dy * dy) < 52) {
+                            removeFinger(f.id);
+                            return;
+                        }
+                    }
+                }
+
+                addFinger("sim_" + (simIdCounter++), x, y, true);
+            });
+
+            // Boutons UI
+            clearSimBtn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                resetAll();
+            });
+
+            replayBtn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                resetAll();
+            });
+
+            soundBtn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                soundEnabled = !soundEnabled;
+                soundBtn.textContent = soundEnabled ? "Son : ON" : "Son : OFF";
+            });
+
+            window.addEventListener("contextmenu", function (e) {
+                e.preventDefault();
+            });
+
+            // --- DESSIN D'UN DOIGT SUR LE CANVAS ---
+            function drawFingerNode(f, now, progressRatio, isWinner) {
+                var x = f.x;
+                var y = f.y;
+                var col = f.color;
+                var age = Math.min(1, (now - f.createdAt) / 200);
+                var scale = 0.5 + 0.5 * age;
+                var pulse = Math.sin(now * 0.007 + f.phase) * 5;
+                var baseR = (isWinner ? 68 : 54) * scale;
+
+                ctx.save();
+                ctx.translate(x, y);
+
+                // 1. Halo lumineux
+                var grad = ctx.createRadialGradient(0, 0, baseR * 0.2, 0, 0, baseR * 2.0);
+                grad.addColorStop(0, "rgba(" + col.r + "," + col.g + "," + col.b + ", 0.45)");
+                grad.addColorStop(0.6, "rgba(" + col.r + "," + col.g + "," + col.b + ", 0.14)");
+                grad.addColorStop(1, "rgba(" + col.r + "," + col.g + "," + col.b + ", 0)");
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(0, 0, baseR * 2.0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 2. Onde expansive périodique
+                var wave = ((now * 0.0014 + f.phase) % 1);
+                var waveR = baseR + wave * 52;
+                ctx.strokeStyle = "rgba(" + col.r + "," + col.g + "," + col.b + "," + ((1 - wave) * 0.7) + ")";
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(0, 0, waveR, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // 3. Anneau rotatif externe
+                ctx.save();
+                ctx.rotate(now * 0.0025 + f.phase);
+                ctx.strokeStyle = isWinner ? "#FFFFFF" : col.hex;
+                ctx.lineWidth = 4.5;
+                ctx.setLineDash([16, 10, 6, 10]);
+                ctx.beginPath();
+                ctx.arc(0, 0, baseR + 14 + pulse * 0.35, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+
+                // 4. Anneau rotatif interne inversé
+                ctx.save();
+                ctx.rotate(-now * 0.0035 - f.phase);
+                ctx.strokeStyle = isWinner ? "#FFFFFF" : "rgba(" + col.r + "," + col.g + "," + col.b + ", 0.85)";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([20, 12]);
+                ctx.beginPath();
+                ctx.arc(0, 0, baseR - 4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+
+                // 5. Arc de progression du compte à rebours
+                if (state === "COUNTDOWN" && progressRatio > 0) {
+                    ctx.save();
+                    ctx.rotate(-Math.PI / 2);
+                    ctx.strokeStyle = "#FFFFFF";
+                    ctx.lineWidth = 6;
+                    ctx.lineCap = "round";
+                    ctx.beginPath();
+                    ctx.arc(0, 0, baseR + 26, 0, Math.PI * 2 * progressRatio);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+
+                // 6. Cœur du doigt
+                ctx.fillStyle = isWinner ? "#FFFFFF" : col.hex;
+                ctx.beginPath();
+                ctx.arc(0, 0, baseR * 0.55 + pulse * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = isWinner ? col.hex : "#090b10";
+                ctx.beginPath();
+                ctx.arc(0, 0, baseR * 0.22, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            // --- BOUCLE PRINCIPALE (RENDU + CHRONOMÈTRE) ---
+            function tick() {
+                var now = Date.now();
+
+                // Fond sombre
+                ctx.fillStyle = "#090b10";
+                ctx.fillRect(0, 0, viewWidth, viewHeight);
+
+                // Grille décorative légère
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+                ctx.lineWidth = 1;
+                var step = 48;
+                var offset = (now * 0.012) % step;
+                for (var gx = offset; gx < viewWidth; gx += step) {
+                    ctx.beginPath();
+                    ctx.moveTo(gx, 0);
+                    ctx.lineTo(gx, viewHeight);
+                    ctx.stroke();
+                }
+                for (var gy = offset; gy < viewHeight; gy += step) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, gy);
+                    ctx.lineTo(viewWidth, gy);
+                    ctx.stroke();
+                }
+
+                var progressRatio = 0;
+
+                // Gestion de l'état COUNTDOWN
+                if (state === "COUNTDOWN") {
+                    var elapsed = now - countdownStartTime;
+                    var remaining = Math.max(0, COUNTDOWN_DURATION - elapsed);
+                    progressRatio = Math.min(1, Math.max(0, elapsed / COUNTDOWN_DURATION));
+
+                    progressFill.style.width = (progressRatio * 100).toFixed(1) + "%";
+
+                    var secCeil = Math.ceil(remaining / 1000);
+                    if (secCeil !== lastBeepSecond && secCeil >= 1 && secCeil <= 3) {
+                        lastBeepSecond = secCeil;
+                        playTickSound(secCeil);
+                        vibrate(25);
+                    }
+
+                    // Relier les doigts par un faisceau énergétique
+                    var keys = getFingerKeys();
+                    if (keys.length >= 2) {
+                        ctx.save();
+                        ctx.strokeStyle = "rgba(255, 255, 255, " + (0.14 + progressRatio * 0.3) + ")";
+                        ctx.lineWidth = 2 + progressRatio * 2;
+                        ctx.setLineDash([8, 8]);
+                        ctx.beginPath();
+                        for (var k = 0; k < keys.length; k++) {
+                            var f1 = fingers[keys[k]];
+                            var f2 = fingers[keys[(k + 1) % keys.length]];
+                            ctx.moveTo(f1.x, f1.y);
+                            ctx.lineTo(f2.x, f2.y);
+                        }
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    // Affichage du chiffre géant au centre (3, 2, 1)
+                    if (secCeil >= 1) {
+                        ctx.save();
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.font = "800 120px -apple-system, BlinkMacSystemFont, sans-serif";
+                        ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+                        ctx.fillText(String(secCeil), viewWidth / 2, viewHeight / 2);
+                        ctx.restore();
+                    }
+
+                    // Fin des 3 secondes -> choix du gagnant
+                    if (remaining <= 0) {
+                        triggerWinnerSelection();
+                    }
+                }
+
+                // Dessin de tous les doigts actifs
+                if (state !== "WINNER") {
+                    var activeKeys = getFingerKeys();
+                    for (var i = 0; i < activeKeys.length; i++) {
+                        drawFingerNode(fingers[activeKeys[i]], now, progressRatio, false);
+                    }
+                }
+
+                // Dessin de l'écran de victoire (onde de choc plein écran dans la couleur gagnante)
+                if (state === "WINNER" && winnerFinger) {
+                    var winElapsed = Math.max(0, now - winnerStartTime);
+                    var maxR = Math.sqrt(viewWidth * viewWidth + viewHeight * viewHeight) * 1.15;
+                    var expandProgress = Math.min(1, winElapsed / 520);
+                    var easeOut = 1 - Math.pow(1 - expandProgress, 3);
+                    var currentRadius = Math.max(10, maxR * easeOut);
+                    var wCol = winnerFinger.color;
+
+                    // Illumination totale de l'écran dans la couleur du doigt choisi
+                    ctx.save();
+                    ctx.fillStyle = wCol.hex;
+                    ctx.beginPath();
+                    ctx.arc(winnerFinger.x, winnerFinger.y, currentRadius, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Léger dégradé radial pour mettre en valeur le point gagnant
+                    var spotGrad = ctx.createRadialGradient(
+                        winnerFinger.x, winnerFinger.y, 20,
+                        winnerFinger.x, winnerFinger.y, maxR * 0.85
+                    );
+                    spotGrad.addColorStop(0, "rgba(255, 255, 255, 0.32)");
+                    spotGrad.addColorStop(0.5, "rgba(0, 0, 0, 0)");
+                    spotGrad.addColorStop(1, "rgba(0, 0, 0, 0.38)");
+                    ctx.fillStyle = spotGrad;
+                    ctx.beginPath();
+                    ctx.arc(winnerFinger.x, winnerFinger.y, currentRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    // Couronnes blanches pulsantes autour du doigt gagnant
+                    for (var rIdx = 0; rIdx < 3; rIdx++) {
+                        var ringProg = ((winElapsed * 0.0015 + rIdx * 0.33) % 1);
+                        var ringRadius = 65 + ringProg * 190;
+                        ctx.save();
+                        ctx.strokeStyle = "rgba(255, 255, 255, " + ((1 - ringProg) * 0.85) + ")";
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.arc(winnerFinger.x, winnerFinger.y, ringRadius, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+
+                    // Dessin du doigt gagnant mis en évidence
+                    drawFingerNode(winnerFinger, now, 1, true);
+
+                    // Étiquette du gagnant
+                    var labelY = winnerFinger.y > viewHeight * 0.38 ? winnerFinger.y - 115 : winnerFinger.y + 120;
+                    ctx.save();
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillStyle = "#090b10";
+                    ctx.font = "900 28px -apple-system, BlinkMacSystemFont, sans-serif";
+                    ctx.fillText("DOIGT CHOISI !", winnerFinger.x, labelY);
+                    ctx.font = "700 16px -apple-system, BlinkMacSystemFont, sans-serif";
+                    ctx.fillText(wCol.name.toUpperCase(), winnerFinger.x, labelY + 26);
+                    ctx.restore();
+                }
+
+                // Particules
+                for (var pIdx = particles.length - 1; pIdx >= 0; pIdx--) {
+                    var p = particles[pIdx];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vx *= 0.95;
+                    p.vy *= 0.95;
+                    p.alpha -= p.decay;
+
+                    if (p.alpha <= 0) {
+                        particles.splice(pIdx, 1);
+                        continue;
+                    }
+
+                    ctx.save();
+                    ctx.globalAlpha = Math.max(0, p.alpha);
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                requestAnimationFrame(tick);
+            }
+
+            requestAnimationFrame(tick);
+        })();
+    </script>
+</body>
+</html>
